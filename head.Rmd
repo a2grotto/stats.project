@@ -1,0 +1,109 @@
+---
+title: "stats.project"
+author: "Adam Grottoli"
+date: "March 6, 2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/Adam/Documents/grad_school/Broders/Data/stats.project")
+```
+
+```{r, results=FALSE}
+all.vary=read.csv('all.vary.csv') ## Read data file with intraspecific variation calculated and duplicate measurement from bats removed
+pairs <- t(combn(nrow(all.vary), 2)) 
+pairs <- pairs[all.vary$bat[pairs[,1]] != all.vary$bat[pairs[,2]],]##create all pssible pairs of individuals
+```
+
+```{r, results=FALSE}
+selected.pairs <- sample(nrow(pairs), 213, replace=TRUE)
+(samps <- pairs[selected.pairs,])## Randomly select 213 pairs of individuals
+```
+
+```{r, results=FALSE}
+(obs1 <- all.vary[pairs[selected.pairs,1],])
+```
+
+```{r, results=FALSE}
+(obs2 <- all.vary[pairs[selected.pairs,2],]) ##Create 2 new dfs for each pair of observations
+```
+
+
+```{r}
+obs2$fa2<-obs2$fa
+fa.dif<-data.frame(obs1$bat, obs1$fa, obs2$bat, obs2$fa2) ## Merge measurements from pairs and assocciated bat ID one df 
+fa.dif$inter.dif<-abs(fa.dif$obs1.fa-fa.dif$obs2.fa2) ##Find absolute difference between measurements from each pair
+```
+
+```{r}
+fa.dif$intra.dif<-all.vary$intra.vary ## Merge intra-individual with inter-individual data
+```
+
+```{r}
+library(tidyr)
+library(reshape2)
+library(ggplot2)
+melt.fa=melt(fa.dif, measure.vars=c('inter.dif', 'intra.dif')) ## Melt data so it can be read by ggplot
+  ggplot(melt.fa, aes(x = variable, y = value)) +
+  geom_boxplot() +
+  scale_x_discrete (labels=c("Interindividual", "Intraindividual")) +
+  labs(y='Difference in Forearm Length Measurements', x='Variation Type') +
+  theme_classic()## Visualise data with ggplot
+```
+Figure 1. Comparing the interindividual FA measurement variation with the intraindividual FA measurement variation.
+
+```{r}
+ggplot(data=melt.fa, aes(x=value)) +
+geom_histogram(binwidth = 0.1) +
+labs(x='FA Variation', y='Frequency') +
+theme_classic() ## Check distribution of data
+```
+Figure 2. Frequency of the of the FA variation including both inter- and intra-individual variation.
+
+```{r}
+shapiro.test(melt.fa$value) ## Test for normality
+```
+
+```{r}
+melt.fa$log.fa=log(melt.fa$value)
+```
+
+```{r}
+melt.fa$cbrt.fa=sign(melt.fa$value) * abs(melt.fa$value)^(1/3) ## Data is not normal (right skew) so it does not meet assumtions of the ANOVA. Transform data using a cubed root transformation.
+ggplot(data=melt.fa, aes(x=cbrt.fa)) +
+geom_histogram(binwidth = 0.1) +
+labs(x='Cubed Root FA Variation', y='Frequency') +
+theme_classic() ## Data looks better following transformation
+
+```
+Figure 3. Frequency of FA measurement variation that has undergone a cubed root transformation.
+```{r}
+shapiro.test(melt.fa$cbrt.fa) ## Test for normality again
+```
+
+
+```{r}
+wilcox.test(melt.fa$value)## Still not normal so we will use a non-parametric test
+```
+
+
+```{r}
+fa.dif$intra.cube.rt=sign(fa.dif$intra.dif) * abs(fa.dif$intra.dif)^(1/3) ## Transform intra-individual data to make normal
+shapiro.test(fa.dif$intra.cube.rt) ## Fails the Shapiro test
+g1 = fa.dif$intra.cube.rt
+m1<-mean(g1)
+std1<-sqrt(var(g1))
+hist(g1, density=20, breaks=20, prob=TRUE, 
+     xlab="Cubed Root Measurement Variation", ylim=c(0, 8), main=NULL)
+curve(dnorm(x, mean=m1, sd=std1), 
+      col="darkblue", lwd=2, add=TRUE, yaxt="n") ## Data still follows a normal distribution relatively well
+```
+Figure 4. Intra-individual FA measurement variation that has undergone a cubed root tranformation with overlayed a normal disribution curve (mean=o.693, sd=0.211)
+
+```{r}
+1-(-2*((pt(.5^(1/3), 212)-1))) ## Using a t distribution we can estimate the average probability any given measurement will have an error of +/- 0.5 mm. We use the cubed root of 0.5 to match the transformation
+```
+
